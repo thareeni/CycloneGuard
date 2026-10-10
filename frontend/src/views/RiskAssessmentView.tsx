@@ -26,34 +26,38 @@ export const RiskAssessmentView: React.FC<RiskAssessmentViewProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedStation = stations.find((s) => s.stationId === selectedStationId) || stations[0];
+  const selectedStation = stations.find(
+    (s) => s.stationId.toLowerCase() === selectedStationId.toLowerCase()
+  ) || stations[0];
 
   useEffect(() => {
     if (!selectedStation) return;
 
-    let isMounted = true;
+    let isCurrent = true;
+    const targetId = selectedStation.stationId;
+
     const fetchAssessment = async () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await api.getRiskAssessment(selectedStation.stationId);
-        if (isMounted) {
+        const data = await api.getRiskAssessment(targetId);
+        if (isCurrent && data && data.stationId.toLowerCase() === targetId.toLowerCase()) {
           setAssessment(data);
         }
       } catch (err: any) {
         console.warn('Backend assessment API failed, computing local deterministic fallback:', err);
         // Robust fallback: compute locally from station telemetry
-        if (isMounted && selectedStation) {
+        if (isCurrent && selectedStation) {
           setAssessment(computeClientAssessment(selectedStation));
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isCurrent) setLoading(false);
       }
     };
 
     fetchAssessment();
     return () => {
-      isMounted = false;
+      isCurrent = false;
     };
   }, [selectedStation]);
 

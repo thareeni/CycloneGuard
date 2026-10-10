@@ -4,7 +4,7 @@ export interface IReliefItem extends Document {
   itemName: string;
   shelterName: string;
   districtName: string;
-  category: 'FOOD_RATIONS' | 'DRINKING_WATER' | 'MEDICAL_KITS' | 'BEDDING_BLANKETS' | 'GENERATORS_FUEL' | 'TARPAULIN_SHEETS';
+  category: 'FOOD_RATIONS' | 'DRINKING_WATER' | 'MEDICAL_KITS' | 'BEDDING_BLANKETS' | 'GENERATORS_FUEL' | 'TARPAULIN_SHEETS' | 'RESCUE_GEAR' | 'COMMUNICATION_GEAR';
   quantity: number;
   unit: string;
   criticalThreshold: number;
@@ -31,6 +31,8 @@ const ReliefItemSchema: Schema = new Schema(
         'BEDDING_BLANKETS',
         'GENERATORS_FUEL',
         'TARPAULIN_SHEETS',
+        'RESCUE_GEAR',
+        'COMMUNICATION_GEAR',
       ],
     },
     quantity: { type: Number, required: true, min: 0 },

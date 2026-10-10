@@ -61,6 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isRedis = health?.components.cache.type === 'REDIS' && health.components.cache.connected;
   const isDb = health?.components.database.connected;
+  const isMongo = Boolean(health?.components.mongodb?.connected);
 
   return (
     <>
@@ -234,9 +235,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <MapPin size={12} color="#38bdf8" />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.25rem',
+              maxHeight: '220px',
+              overflowY: 'auto',
+              paddingRight: '0.2rem',
+            }}>
               {stations.map((st) => {
-                const isSelected = st.stationId === selectedStationId;
+                const isSelected = st.stationId.toLowerCase() === selectedStationId.toLowerCase();
                 return (
                   <button
                     key={st.stationId}
@@ -248,8 +256,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       width: '100%',
                       padding: '0.45rem 0.65rem',
                       borderRadius: '0.375rem',
-                      border: isSelected ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid #1a273b',
-                      background: isSelected ? 'rgba(14, 165, 233, 0.15)' : '#090e1c',
+                      border: isSelected ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid #1a273b',
+                      background: isSelected ? 'rgba(14, 165, 233, 0.18)' : '#090e1c',
                       color: isSelected ? '#f8fafc' : '#94a3b8',
                       fontSize: '0.78rem',
                       cursor: 'pointer',
@@ -295,6 +303,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span style={{ color: '#94a3b8' }}>IMD RSMC:</span>
               <span style={{ color: health?.components.imd.configured ? '#818cf8' : '#fbbf24', fontWeight: 600 }}>
                 {health?.components.imd.configured ? 'AUTHENTICATED' : 'INTERFACE ACTIVE'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: '#94a3b8' }}>MongoDB (MERN):</span>
+              <span style={{ color: isMongo ? '#34d399' : '#fbbf24', fontWeight: 600 }}>
+                {isMongo ? 'ATLAS CONNECTED' : 'STANDBY'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>

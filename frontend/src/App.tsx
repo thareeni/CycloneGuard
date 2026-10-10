@@ -170,6 +170,7 @@ export function App() {
             <SheltersReliefView
               shelters={shelters}
               inventory={inventory}
+              selectedDistrict={selectedStation?.district}
             />
           )}
         </main>

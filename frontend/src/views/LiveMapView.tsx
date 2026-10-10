@@ -80,13 +80,30 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
           />
 
           {/* Quick Station Jump Strip below map */}
-          <div className="card" style={{ padding: '0.75rem 1rem', marginTop: '1rem' }}>
-            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-              Select Coastal Monitoring Station
+          <div className="card" style={{ padding: '0.85rem 1rem', marginTop: '1rem' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '0.65rem',
+            }}>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Coastal Monitoring Stations ({stations.length})
+              </div>
+              <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                Click to pan map & inspect telemetry
+              </span>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex',
+              gap: '0.45rem',
+              flexWrap: 'wrap',
+              maxHeight: '120px',
+              overflowY: 'auto',
+              paddingRight: '0.2rem',
+            }}>
               {stations.map((st) => {
-                const isSelected = st.stationId === selectedStation?.stationId;
+                const isSelected = st.stationId.toLowerCase() === selectedStation?.stationId.toLowerCase();
                 return (
                   <button
                     key={st.stationId}
@@ -95,14 +112,19 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
                       padding: '0.35rem 0.65rem',
                       borderRadius: '0.375rem',
                       border: isSelected ? '1px solid #38bdf8' : '1px solid #24344d',
-                      background: isSelected ? 'rgba(14, 165, 233, 0.2)' : '#0d1524',
+                      background: isSelected ? 'rgba(14, 165, 233, 0.25)' : '#0d1524',
                       color: isSelected ? '#38bdf8' : '#cbd5e1',
                       fontSize: '0.75rem',
                       fontWeight: isSelected ? 700 : 500,
                       cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      transition: 'all 0.15s ease',
                     }}
                   >
-                    📍 {st.district} ({Math.round(st.temperatureCelsius)}°C)
+                    <span>📍 {st.district}</span>
+                    <strong style={{ color: isSelected ? '#ffffff' : '#94a3b8' }}>{Math.round(st.temperatureCelsius)}°C</strong>
                   </button>
                 );
               })}

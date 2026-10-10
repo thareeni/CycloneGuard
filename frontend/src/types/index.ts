@@ -167,8 +167,42 @@ export interface SystemHealthResponse {
   timestamp: string;
   components: {
     database: { connected: boolean; host: string; database: string };
+    mongodb?: { connected: boolean; state: string; uri: string; dbName: string; error?: string | null };
     cache: { type: string; connected: boolean; url: string; memoryKeysCount: number };
     openMeteo: { provider: string; url: string; authRequired: boolean; status: string };
     imd: { provider: string; portalUrl: string; configured: boolean; status: string };
   };
 }
+
+export type NavigationTab = 'dashboard' | 'live-map' | 'risk-assessment' | 'shelters-relief';
+
+export interface RiskFactor {
+  factor: string;
+  measuredValue: string;
+  threshold: string;
+  score: number;
+  maxScore: number;
+  severity: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  rationale: string;
+}
+
+export interface RuleBasedRiskAssessment {
+  stationId: string;
+  locationName: string;
+  district: string;
+  assessedAt: string;
+  methodology: string;
+  overallScore: number;
+  riskCategory: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  summaryExplanation: string;
+  actionRecommendation: string;
+  contributingFactors: RiskFactor[];
+  dataQuality: {
+    windAvailable: boolean;
+    gustAvailable: boolean;
+    pressureAvailable: boolean;
+    rainAvailable: boolean;
+    missingParamsCount: number;
+  };
+}
+

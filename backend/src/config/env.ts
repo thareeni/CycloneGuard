@@ -39,4 +39,10 @@ export const config = {
     nodalContact: 'sankar.nath@imd.gov.in',
     portalUrl: 'https://api.imd.gov.in',
   },
+
+  // MongoDB (MERN Stack Database)
+  mongodb: {
+    uri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cycloneguard',
+    dbName: process.env.MONGODB_DB_NAME || 'cycloneguard',
+  },
 };

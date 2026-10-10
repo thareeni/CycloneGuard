@@ -63,6 +63,56 @@ export class WeatherController {
       });
     }
   }
+
+  /**
+   * GET /api/weather/assessment/:stationId?
+   * Evaluates transparent rule-based weather impact estimate using live weather data
+   */
+  public async getRiskAssessment(req: Request, res: Response) {
+    try {
+      const { stationId } = req.params;
+      const refresh = req.query.refresh === 'true';
+
+      if (stationId) {
+        const station = TAMIL_NADU_COASTAL_STATIONS.find(
+          (s) => s.id.toLowerCase() === stationId.toLowerCase()
+        );
+
+        if (!station) {
+          return res.status(404).json({
+            success: false,
+            message: `Station '${stationId}' not found. Available stations: ${TAMIL_NADU_COASTAL_STATIONS.map((s) => s.id).join(', ')}`,
+          });
+        }
+
+        const assessment = await openMeteoService.getStationAssessment(station, refresh);
+        return res.json({
+          success: true,
+          methodology: 'Rule-Based Deterministic Meteorological Matrix (IMD/WMO Criteria)',
+          aiDisclaimer: 'Calculated using transparent physical threshold rules, NOT AI/ML model output.',
+          data: assessment,
+        });
+      }
+
+      // Assess all stations
+      const observations = await openMeteoService.getAllCoastalStationsWeather(refresh);
+      const assessments = observations.map((obs) => openMeteoService.computeRuleBasedAssessment(obs));
+
+      return res.json({
+        success: true,
+        methodology: 'Rule-Based Deterministic Meteorological Matrix (IMD/WMO Criteria)',
+        aiDisclaimer: 'Calculated using transparent physical threshold rules, NOT AI/ML model output.',
+        count: assessments.length,
+        data: assessments,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to compute risk assessment',
+        error: error.message,
+      });
+    }
+  }
 }
 
 export const weatherController = new WeatherController();

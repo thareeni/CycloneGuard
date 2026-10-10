@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, RefreshCw, Radio, Database, Cpu } from 'lucide-react';
+import { RefreshCw, Radio, Database, Cpu, Menu } from 'lucide-react';
 import { SystemHealthResponse } from '../types';
 
 interface NavbarProps {
@@ -7,11 +7,21 @@ interface NavbarProps {
   loading: boolean;
   onRefresh: () => void;
   lastUpdated: string | null;
+  pageTitle?: string;
+  onToggleMobile?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ health, loading, onRefresh, lastUpdated }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  health,
+  loading,
+  onRefresh,
+  lastUpdated,
+  pageTitle,
+  onToggleMobile,
+}) => {
   const isRedisActive = health?.components.cache.type === 'REDIS' && health.components.cache.connected;
   const isDbActive = health?.components.database.connected;
+  const isMongoActive = Boolean(health?.components.mongodb?.connected);
 
   return (
     <header style={{
@@ -23,39 +33,48 @@ export const Navbar: React.FC<NavbarProps> = ({ health, loading, onRefresh, last
       zIndex: 100,
     }}>
       <div style={{
-        maxWidth: '1440px',
         margin: '0 auto',
-        padding: '0.875rem 1rem',
+        padding: '0.875rem 1.25rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '1rem',
       }}>
-        {/* Brand & Area */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-            padding: '0.65rem',
-            borderRadius: '0.65rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 0 15px rgba(2, 132, 199, 0.4)',
-          }}>
-            <Shield size={24} color="#ffffff" />
-          </div>
+        {/* Left: Mobile Menu Toggle + Current Section Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {onToggleMobile && (
+            <button
+              onClick={onToggleMobile}
+              className="mobile-hamburger-btn"
+              style={{
+                background: '#162032',
+                border: '1px solid #24344d',
+                color: '#f1f5f9',
+                padding: '0.45rem',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Toggle Navigation Menu"
+            >
+              <Menu size={20} />
+            </button>
+          )}
+
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <h1 style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#f8fafc' }}>
-                CycloneGuard
-              </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.02em' }}>
+                {pageTitle || 'CycloneGuard Command Center'}
+              </h2>
               <span className="badge badge-live">
                 <span className="pulse-dot"></span> TN Coastal Watch
               </span>
             </div>
-            <p style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-              Real-Time Cyclone Disaster Management System • Bay of Bengal Corridor
+            <p style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
+              Real-Time Disaster Management System • Bay of Bengal Maritime Corridor
             </p>
           </div>
         </div>
@@ -118,6 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({ health, loading, onRefresh, last
           </div>
 
           {/* Database telemetry */}
+          {/* PostgreSQL database telemetry */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -132,6 +152,24 @@ export const Navbar: React.FC<NavbarProps> = ({ health, loading, onRefresh, last
             <span style={{ color: '#94a3b8' }}>PostgreSQL:</span>
             <span style={{ color: isDbActive ? '#34d399' : '#cbd5e1', fontWeight: 600 }}>
               {isDbActive ? 'ONLINE' : 'BOOTSTRAP'}
+            </span>
+          </div>
+
+          {/* MongoDB MERN telemetry */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            background: isMongoActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+            border: isMongoActive ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.35)',
+            padding: '0.3rem 0.65rem',
+            borderRadius: '0.375rem',
+            fontSize: '0.75rem',
+          }}>
+            <Database size={14} color={isMongoActive ? '#34d399' : '#fbbf24'} />
+            <span style={{ color: '#94a3b8' }}>MongoDB:</span>
+            <span style={{ color: isMongoActive ? '#34d399' : '#fbbf24', fontWeight: 600 }}>
+              {isMongoActive ? 'CONNECTED' : 'STANDBY'}
             </span>
           </div>
 

@@ -63,4 +63,65 @@ export const api = {
     const json = await res.json();
     return json.data || [];
   },
+
+  /**
+   * Rule-based meteorological risk assessment (Transparent criteria, non-ML)
+   */
+  async getRiskAssessment(stationId?: string, forceRefresh = false): Promise<any> {
+    const url = stationId
+      ? `${API_BASE}/weather/assessment/${stationId}${forceRefresh ? '?refresh=true' : ''}`
+      : `${API_BASE}/weather/assessment${forceRefresh ? '?refresh=true' : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Risk assessment fetch failed (${res.status})`);
+    const json = await res.json();
+    return json.data;
+  },
+
+  /**
+   * MERN Stack: MongoDB Collection CRUD for Relief Inventory
+   */
+  async getMongoInventory(district?: string, category?: string): Promise<any> {
+    const params = new URLSearchParams();
+    if (district && district !== 'ALL') params.append('district', district);
+    if (category && category !== 'ALL') params.append('category', category);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(`${API_BASE}/mongo/inventory${queryString}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `MongoDB request failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  async createMongoReliefItem(itemData: any): Promise<any> {
+    const res = await fetch(`${API_BASE}/mongo/inventory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(itemData),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'Failed to create item in MongoDB');
+    return json;
+  },
+
+  async updateMongoReliefItem(id: string, updateData: any): Promise<any> {
+    const res = await fetch(`${API_BASE}/mongo/inventory/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateData),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'Failed to update item in MongoDB');
+    return json;
+  },
+
+  async deleteMongoReliefItem(id: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/mongo/inventory/${id}`, {
+      method: 'DELETE',
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'Failed to delete item from MongoDB');
+    return json;
+  },
 };

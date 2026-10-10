@@ -130,3 +130,34 @@ export const TAMIL_NADU_COASTAL_STATIONS: CoastalStation[] = [
     isHighRiskZone: true,
   },
 ];
+
+export interface RiskFactor {
+  factor: string;
+  measuredValue: string;
+  threshold: string;
+  score: number;
+  maxScore: number;
+  severity: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  rationale: string;
+}
+
+export interface RuleBasedRiskAssessment {
+  stationId: string;
+  locationName: string;
+  district: string;
+  assessedAt: string;
+  methodology: string;
+  overallScore: number;
+  riskCategory: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  summaryExplanation: string;
+  actionRecommendation: string;
+  contributingFactors: RiskFactor[];
+  dataQuality: {
+    windAvailable: boolean;
+    gustAvailable: boolean;
+    pressureAvailable: boolean;
+    rainAvailable: boolean;
+    missingParamsCount: number;
+  };
+}
+

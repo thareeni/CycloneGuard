@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
-import { DataSourceLegend } from './components/DataSourceLegend';
-import { CycloneStatusBanner } from './components/CycloneStatusBanner';
-import { LiveWeatherCard } from './components/LiveWeatherCard';
-import { MapView } from './components/MapView';
-import { SheltersTable } from './components/SheltersTable';
-import { ReliefInventoryTable } from './components/ReliefInventoryTable';
+import { DashboardView } from './views/DashboardView';
+import { LiveMapView } from './views/LiveMapView';
+import { RiskAssessmentView } from './views/RiskAssessmentView';
+import { SheltersReliefView } from './views/SheltersReliefView';
 import { api } from './services/api';
 import {
   LiveWeatherObservation,
@@ -13,17 +12,20 @@ import {
   Shelter,
   ReliefInventoryItem,
   SystemHealthResponse,
+  NavigationTab,
 } from './types';
-import { AlertCircle, Home, Package } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export function App() {
+  const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
+  const [selectedStationId, setSelectedStationId] = useState<string>('chennai');
+
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [weatherStations, setWeatherStations] = useState<LiveWeatherObservation[]>([]);
   const [cycloneData, setCycloneData] = useState<CycloneStatusResponse | null>(null);
   const [shelters, setShelters] = useState<Shelter[]>([]);
   const [inventory, setInventory] = useState<ReliefInventoryItem[]>([]);
-  const [selectedStationId, setSelectedStationId] = useState<string>('chennai');
-  const [activeTab, setActiveTab] = useState<'shelters' | 'inventory'>('shelters');
   const [loading, setLoading] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export function App() {
   useEffect(() => {
     fetchAllData();
 
-    // Auto-refresh every 5 minutes (300,000 ms)
+    // Auto-refresh interval every 5 minutes
     const interval = setInterval(() => {
       fetchAllData();
     }, 300000);
@@ -68,137 +70,130 @@ export function App() {
     return () => clearInterval(interval);
   }, [fetchAllData]);
 
+  const selectedStation = weatherStations.find(
+    (s) => s.stationId.toLowerCase() === selectedStationId.toLowerCase()
+  ) || weatherStations[0];
+
+  const getPageTitle = (tab: NavigationTab) => {
+    switch (tab) {
+      case 'dashboard':
+        return 'Command Dashboard';
+      case 'live-map':
+        return 'Live Map & Cyclone Tracking';
+      case 'risk-assessment':
+        return 'Meteorological Risk Assessment';
+      case 'shelters-relief':
+        return 'Shelters & Relief Logistics';
+      default:
+        return 'CycloneGuard';
+    }
+  };
+
   return (
-    <div className="app-container">
-      {/* Top Navbar */}
-      <Navbar
+    <div className="app-shell">
+      {/* Persistent Left Sidebar */}
+      <Sidebar
+        currentTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab)}
+        stations={weatherStations}
+        selectedStationId={selectedStationId}
+        onSelectStation={(id) => setSelectedStationId(id)}
         health={health}
-        loading={loading}
-        onRefresh={() => fetchAllData(true)}
-        lastUpdated={lastUpdated}
+        isOpenMobile={isMobileNavOpen}
+        onToggleMobile={() => setIsMobileNavOpen(!isMobileNavOpen)}
       />
 
-      <main className="main-content">
-        {/* Error notification */}
-        {error && (
-          <div style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid #ef4444',
-            borderRadius: '0.5rem',
-            padding: '0.85rem 1.25rem',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-          }}>
-            <AlertCircle size={20} color="#ef4444" />
-            <div style={{ fontSize: '0.85rem', color: '#fecaca' }}>
-              <strong>Connection Warning:</strong> {error} Ensure backend is running at <code style={{ color: '#fff' }}>http://localhost:5000</code>.
-            </div>
-          </div>
-        )}
+      {/* Main Content Area */}
+      <div className="main-viewport">
+        {/* Top Header Navbar */}
+        <Navbar
+          health={health}
+          loading={loading}
+          onRefresh={() => fetchAllData(true)}
+          lastUpdated={lastUpdated}
+          pageTitle={getPageTitle(activeTab)}
+          onToggleMobile={() => setIsMobileNavOpen(!isMobileNavOpen)}
+        />
 
-        {/* Data Governance Legend */}
-        <DataSourceLegend />
-
-        {/* Official Cyclone Status Banner */}
-        <CycloneStatusBanner cycloneData={cycloneData} />
-
-        {/* Live Weather Cards Section */}
-        <section style={{ marginBottom: '2rem' }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '1rem',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc' }}>
-                  Live Coastal Meteorological Telemetry
-                </h2>
-                <span className="badge badge-live">
-                  <span className="pulse-dot"></span> Open-Meteo Real-Time
-                </span>
+        {/* Viewport Content */}
+        <main className="content-area">
+          {/* Connection Error Banner */}
+          {error && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid #ef4444',
+              borderRadius: '0.5rem',
+              padding: '0.85rem 1.25rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+            }}>
+              <AlertCircle size={20} color="#ef4444" />
+              <div style={{ fontSize: '0.85rem', color: '#fecaca' }}>
+                <strong>Connection Alert:</strong> {error} Ensure backend is running at <code style={{ color: '#fff' }}>http://localhost:5000</code>.
               </div>
-              <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Real-time automated weather observations for high-vulnerability coastal districts of Tamil Nadu.
-              </p>
             </div>
-          </div>
-
-          <div className="grid-cards">
-            {weatherStations.map((station) => (
-              <LiveWeatherCard
-                key={station.stationId}
-                observation={station}
-                isSelected={station.stationId === selectedStationId}
-                onSelect={() => setSelectedStationId(station.stationId)}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* Geospatial Map + Operational Hubs Layout */}
-        <section style={{ marginBottom: '2rem' }}>
-          <MapView
-            weatherStations={weatherStations}
-            shelters={shelters}
-            cycloneSystems={cycloneData?.systems}
-            selectedStationId={selectedStationId}
-            onSelectStation={(id) => setSelectedStationId(id)}
-          />
-        </section>
-
-        {/* Ground Operational Management: Shelters & Relief Inventory */}
-        <section>
-          <div className="tabs-header">
-            <button
-              onClick={() => setActiveTab('shelters')}
-              className={`tab-btn ${activeTab === 'shelters' ? 'active' : ''}`}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-            >
-              <Home size={16} />
-              <span>Emergency Shelters ({shelters.length})</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('inventory')}
-              className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-            >
-              <Package size={16} />
-              <span>Relief Inventory Stock ({inventory.length})</span>
-            </button>
-          </div>
-
-          {activeTab === 'shelters' ? (
-            <SheltersTable shelters={shelters} />
-          ) : (
-            <ReliefInventoryTable inventory={inventory} />
           )}
-        </section>
-      </main>
 
-      {/* Footer */}
-      <footer style={{
-        background: '#090d16',
-        borderTop: '1px solid #1a273b',
-        padding: '1.5rem 1rem',
-        textAlign: 'center',
-        fontSize: '0.78rem',
-        color: '#64748b',
-      }}>
-        <div style={{ maxWidth: '1440px', margin: '0 auto' }}>
-          <p style={{ marginBottom: '0.25rem', color: '#94a3b8' }}>
-            <strong>CycloneGuard</strong> — Real-Time Cyclone Disaster Management System
-          </p>
-          <p>
-            Data sources: Open-Meteo Real-Time Weather • India Meteorological Department (RSMC New Delhi) • Tamil Nadu State Disaster Management Authority (TNSDMA)
-          </p>
-        </div>
-      </footer>
+          {/* Conditional Multi-Page Single-Page Views */}
+          {activeTab === 'dashboard' && (
+            <DashboardView
+              stations={weatherStations}
+              selectedStation={selectedStation}
+              onSelectStation={(id) => setSelectedStationId(id)}
+              cycloneData={cycloneData}
+              shelters={shelters}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
+
+          {activeTab === 'live-map' && (
+            <LiveMapView
+              stations={weatherStations}
+              selectedStation={selectedStation}
+              onSelectStation={(id) => setSelectedStationId(id)}
+              cycloneData={cycloneData}
+              shelters={shelters}
+            />
+          )}
+
+          {activeTab === 'risk-assessment' && (
+            <RiskAssessmentView
+              stations={weatherStations}
+              selectedStationId={selectedStationId}
+              onSelectStation={(id) => setSelectedStationId(id)}
+            />
+          )}
+
+          {activeTab === 'shelters-relief' && (
+            <SheltersReliefView
+              shelters={shelters}
+              inventory={inventory}
+            />
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer style={{
+          background: '#090d16',
+          borderTop: '1px solid #1a273b',
+          padding: '1.25rem 1rem',
+          textAlign: 'center',
+          fontSize: '0.75rem',
+          color: '#64748b',
+          marginTop: 'auto',
+        }}>
+          <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+            <p style={{ marginBottom: '0.25rem', color: '#94a3b8' }}>
+              <strong>CycloneGuard</strong> — Real-Time Cyclone Disaster Management System
+            </p>
+            <p>
+              Data Provenance: Open-Meteo Real-Time Weather • India Meteorological Department (RSMC New Delhi) • Tamil Nadu State Disaster Management Authority (TNSDMA)
+            </p>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

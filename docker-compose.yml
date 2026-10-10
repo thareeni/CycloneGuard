@@ -1,0 +1,83 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: cycloneguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cycloneguard
+      POSTGRES_USER: cyclone_user
+      POSTGRES_PASSWORD: cyclone_secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/src/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyclone_user -d cycloneguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cycloneguard-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Express.js TypeScript Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cycloneguard-backend
+    restart: unless-stopped
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      CORS_ORIGIN: http://localhost:5173
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: cycloneguard
+      DB_USER: cyclone_user
+      DB_PASSWORD: cyclone_secure_password
+      REDIS_URL: redis://redis:6379
+      WEATHER_CACHE_TTL_SECONDS: 600
+      OPEN_METEO_BASE_URL: https://api.open-meteo.com/v1/forecast
+      WEATHER_FETCH_TIMEOUT_MS: 7000
+      IMD_API_BASE_URL: https://api.imd.gov.in
+      IMD_API_KEY: ${IMD_API_KEY:-}
+      IMD_API_TIMEOUT_MS: 8000
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # React + Vite Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cycloneguard-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:

@@ -1,4 +1,11 @@
 # CycloneGuard — Real-Time Cyclone Disaster Management System
+# CycloneGuard — Disaster Management System for Tamil Nadu
+
+**Live Deployment:** https://cyclone-guard.vercel.app/
+
+**GitHub Repository:** https://github.com/thareeni/CycloneGuard
+
+A real-time cyclone disaster management platform for Tamil Nadu, featuring coastal weather monitoring, district risk assessment, shelter information, and relief resource management.
 
 [![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript%20%2B%20Vite-blue)](https://vitejs.dev)
 [![Backend](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express%20%2B%20TypeScript-green)](https://nodejs.org)

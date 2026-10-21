@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && if not exist dist\\db mkdir dist\\db && copy /Y src\\db\\schema.sql dist\\db\\schema.sql && copy /Y src\\db\\seed.sql dist\\db\\seed.sql",
+    "build": "tsc && mkdir -p dist/db && cp src/db/schema.sql dist/db/schema.sql && cp src/db/seed.sql dist/db/seed.sql",
     "start": "node dist/index.js",
     "bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts",
     "test": "tsx src/tests/run-tests.ts"

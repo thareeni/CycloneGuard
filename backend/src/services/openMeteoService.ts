@@ -10,7 +10,9 @@ import {
   HourlyForecastPoint,
   RuleBasedRiskAssessment,
   RiskFactor,
+  DistrictRiskSummary,
 } from '../types/weather';
+import { TAMIL_NADU_COASTAL_DISTRICTS } from '../constants/districts';
 
 // Zod schema to validate real Open-Meteo API payload
 const OpenMeteoSchema = z.object({
@@ -69,6 +71,25 @@ function decodeWmoWeather(code: number): string {
   }
 }
 
+export function getRainfallDescription(rainfallMm: number, precipMm: number, weatherCode: number): string {
+  if (rainfallMm > 0) {
+    if (rainfallMm >= 35) return `${rainfallMm.toFixed(1)} mm/h (Torrential Inundation)`;
+    if (rainfallMm >= 15) return `${rainfallMm.toFixed(1)} mm/h (Heavy Rainfall)`;
+    if (rainfallMm >= 5) return `${rainfallMm.toFixed(1)} mm/h (Moderate Rain)`;
+    return `${rainfallMm.toFixed(1)} mm/h (Light Showers)`;
+  }
+  if (precipMm > 0) {
+    return `${precipMm.toFixed(1)} mm (Preceding Interval Accumulated Volume)`;
+  }
+  if ([51, 53, 55].includes(weatherCode)) {
+    return '0.0 mm/h (Trace Drizzle detected by sensor; volume < 0.1 mm)';
+  }
+  if ([61, 80].includes(weatherCode)) {
+    return '0.0 mm/h (Passing Showers detected; trace volume)';
+  }
+  return '0.0 mm/h (Nil Precipitation)';
+}
+
 function computeCycloneRiskIndex(
   windSpeedKmh: number,
   gustsKmh: number,
@@ -101,6 +122,7 @@ export class OpenMeteoService {
       if (cached) {
         return {
           ...cached,
+          dataFreshness: 'CACHED',
           metadata: {
             ...cached.metadata,
             cached: true,
@@ -190,6 +212,10 @@ export class OpenMeteoService {
         weatherCondition: decodeWmoWeather(weatherCode),
         isDay: curr.is_day === 1,
         cycloneRiskIndex: computeCycloneRiskIndex(windSpeed, windGusts, pressure, rainfall),
+        riskScore: 0,
+        riskCategory: 'LOW',
+        dataFreshness: 'LIVE',
+        rainfallDescription: getRainfallDescription(rainfall, curr.precipitation ?? 0, weatherCode),
         observedAt: curr.time,
         hourlyForecast,
         metadata: {
@@ -200,6 +226,15 @@ export class OpenMeteoService {
           cached: false,
         },
       };
+
+      // Authoritative deterministic risk score calculation (Single Source of Truth)
+      const assessment = this.computeRuleBasedAssessment(observation);
+      observation.cycloneScore = assessment.cycloneScore;
+      observation.cycloneCategory = assessment.cycloneCategory;
+      observation.rainfallScore = assessment.rainfallScore;
+      observation.rainfallCategory = assessment.rainfallCategory;
+      observation.riskScore = assessment.overallScore;
+      observation.riskCategory = assessment.riskCategory;
 
       // 4. Save to Redis Cache
       await cacheService.set(cacheKey, observation, config.redis.cacheTtlSeconds);
@@ -297,7 +332,7 @@ export class OpenMeteoService {
     if (!res || res.rows.length === 0) return null;
     const row = res.rows[0];
 
-    return {
+    const obs: LiveWeatherObservation = {
       stationId: station.id,
       locationName: station.name,
       district: station.district,
@@ -321,6 +356,10 @@ export class OpenMeteoService {
         parseFloat(row.surface_pressure_hpa),
         parseFloat(row.rainfall_mm)
       ),
+      riskScore: 0,
+      riskCategory: 'LOW',
+      dataFreshness: 'STALE',
+      rainfallDescription: getRainfallDescription(parseFloat(row.rainfall_mm), parseFloat(row.precipitation_mm), parseInt(row.weather_code, 10)),
       observedAt: row.observed_at.toISOString(),
       hourlyForecast: [],
       metadata: {
@@ -331,192 +370,280 @@ export class OpenMeteoService {
         cached: true,
       },
     };
+
+    const assessment = this.computeRuleBasedAssessment(obs);
+    obs.cycloneScore = assessment.cycloneScore;
+    obs.cycloneCategory = assessment.cycloneCategory;
+    obs.rainfallScore = assessment.rainfallScore;
+    obs.rainfallCategory = assessment.rainfallCategory;
+    obs.riskScore = assessment.overallScore;
+    obs.riskCategory = assessment.riskCategory;
+    return obs;
   }
 
   /**
    * Transparent rule-based weather impact calculation (Deterministic matrix, Non-ML)
+   * Produces TWO SEPARATE 100-Point Hazard Scores:
+   * 1. Cyclone Impact Score (0 - 100): Sustained Wind (40) + Peak Gusts (30) + Barometric Pressure Drop (30)
+   * 2. Rainfall Impact Score (0 - 100): Hourly Rate Intensity (60) + Moisture Accumulation Volume (40)
    */
   public computeRuleBasedAssessment(obs: LiveWeatherObservation): RuleBasedRiskAssessment {
-    const factors: RiskFactor[] = [];
+    const cycloneFactors: RiskFactor[] = [];
+    const rainfallFactors: RiskFactor[] = [];
     let missingCount = 0;
-    let totalScore = 0;
 
-    // 1. Sustained Wind Factor (Max 30)
-    let windScore = 0;
+    // ==========================================
+    // SCORE 1: CYCLONE IMPACT FACTORS (0 - 100)
+    // ==========================================
+
+    // 1A. Sustained Wind Speed (Max 40 points, IMD segmented scale)
+    let windScore = 4;
     let windSev: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL' = 'NORMAL';
     if (obs.windSpeedKmh >= 62) {
-      windScore = 30;
+      windScore = 40;
       windSev = 'CRITICAL';
     } else if (obs.windSpeedKmh >= 45) {
-      windScore = 22;
+      windScore = 28;
       windSev = 'HIGH';
     } else if (obs.windSpeedKmh >= 30) {
-      windScore = 14;
+      windScore = 16;
       windSev = 'ELEVATED';
     } else if (obs.windSpeedKmh >= 15) {
-      windScore = 6;
-      windSev = 'NORMAL';
-    } else {
-      windScore = 2;
+      windScore = 8;
       windSev = 'NORMAL';
     }
-    totalScore += windScore;
-    factors.push({
+    cycloneFactors.push({
       factor: '10m Sustained Wind Speed',
       measuredValue: `${obs.windSpeedKmh.toFixed(1)} km/h`,
       threshold: '< 30 km/h: Normal; 30-44: Squally; 45-61: Gale; >= 62: Cyclonic Storm',
       score: windScore,
-      maxScore: 30,
+      maxScore: 40,
       severity: windSev,
       rationale: obs.windSpeedKmh >= 62
-        ? 'IMD Cyclonic storm threshold exceeded. Major risk to coastal shipping, fishing crafts, and structures.'
+        ? 'IMD Cyclonic storm threshold exceeded (>= 62 km/h). Immediate risk to small craft, thatched roofing, and power lines.'
         : obs.windSpeedKmh >= 30
-        ? 'Moderate to squally coastal wind detected. Coastal vigilance recommended.'
+        ? 'Squally coastal wind detected. Marine warning and coastal vigilance recommended.'
         : 'Sustained winds within normal baseline atmospheric levels.',
     });
 
-    // 2. Wind Gust Severity (Max 25)
-    let gustScore = 0;
+    // 1B. Peak Wind Gust Turbulence (Max 30 points)
+    let gustScore = 2;
     let gustSev: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL' = 'NORMAL';
     if (obs.windGustsKmh >= 90) {
-      gustScore = 25;
+      gustScore = 30;
       gustSev = 'CRITICAL';
     } else if (obs.windGustsKmh >= 65) {
-      gustScore = 18;
+      gustScore = 22;
       gustSev = 'HIGH';
     } else if (obs.windGustsKmh >= 45) {
-      gustScore = 11;
+      gustScore = 14;
       gustSev = 'ELEVATED';
     } else if (obs.windGustsKmh >= 20) {
-      gustScore = 4;
-      gustSev = 'NORMAL';
-    } else {
-      gustScore = 1;
+      gustScore = 6;
       gustSev = 'NORMAL';
     }
-    totalScore += gustScore;
-    factors.push({
+    cycloneFactors.push({
       factor: 'Peak Wind Gusts',
       measuredValue: `${obs.windGustsKmh.toFixed(1)} km/h`,
-      threshold: '< 45 km/h: Low; 45-64: Elevated; 65-89: High; >= 90: Critical',
+      threshold: '< 45 km/h: Low; 45-64: Elevated; 65-89: Severe; >= 90: Destructive',
       score: gustScore,
-      maxScore: 25,
+      maxScore: 30,
       severity: gustSev,
       rationale: obs.windGustsKmh >= 65
-        ? 'Dangerous turbulent gusts capable of damaging unreinforced roofing, power lines, and trees.'
+        ? 'Turbulent gusts capable of structural damage to temporary structures, banners, and trees.'
         : obs.windGustsKmh >= 45
-        ? 'Elevated gust turbulence. Temporary banners and light fixtures should be secured.'
+        ? 'Elevated gust turbulence. Small craft advisory recommended.'
         : 'Peak gusts pose minimal structural threat.',
     });
 
-    // 3. Barometric Pressure Deficit (Max 25)
-    let pressScore = 0;
+    // 1C. Barometric Surface Pressure Deficit (Max 30 points)
+    let pressScore = 2;
     let pressSev: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL' = 'NORMAL';
+    let pressValueStr = `${obs.surfacePressureHpa.toFixed(1)} hPa`;
+    let pressRationale = 'Surface pressure indicates standard coastal atmospheric gradient.';
+
     if (obs.surfacePressureHpa <= 0) {
       missingCount++;
+      pressScore = 0;
+      pressValueStr = 'Sensor Offline / N/A';
+      pressRationale = 'Barometric pressure sensor data unavailable; flagged as unverified input.';
     } else if (obs.surfacePressureHpa < 992) {
-      pressScore = 25;
+      pressScore = 30;
       pressSev = 'CRITICAL';
-    } else if (obs.surfacePressureHpa < 1000) {
-      pressScore = 19;
+      pressRationale = 'Severe central pressure deficit (< 992 hPa) indicates deep cyclonic vortex intensification.';
+    } else if (obs.surfacePressureHpa < 998) {
+      pressScore = 24;
       pressSev = 'HIGH';
-    } else if (obs.surfacePressureHpa < 1006) {
-      pressScore = 12;
+      pressRationale = 'Deep depression barometric gradient (< 998 hPa) over coastal sector.';
+    } else if (obs.surfacePressureHpa < 1004) {
+      pressScore = 16;
       pressSev = 'ELEVATED';
+      pressRationale = 'Moderate barometric depression (1000-1004 hPa) indicating active low-pressure zone.';
     } else if (obs.surfacePressureHpa < 1010) {
-      pressScore = 5;
+      pressScore = 6;
       pressSev = 'NORMAL';
-    } else {
-      pressScore = 2;
-      pressSev = 'NORMAL';
+      pressRationale = 'Marginal pressure deviation from 1013.25 hPa nominal baseline.';
     }
-    totalScore += pressScore;
-    factors.push({
+    cycloneFactors.push({
       factor: 'Barometric Surface Pressure',
-      measuredValue: obs.surfacePressureHpa > 0 ? `${obs.surfacePressureHpa.toFixed(1)} hPa` : 'Sensor N/A',
-      threshold: '> 1008 hPa: Stable; 1004-1007: Low; 998-1003: Depression; < 998: Deep Low / Cyclone',
+      measuredValue: pressValueStr,
+      threshold: '> 1008 hPa: Stable; 1004-1008: Low; 998-1003: Depression; < 998: Deep Low / Cyclone',
       score: pressScore,
-      maxScore: 25,
+      maxScore: 30,
       severity: pressSev,
-      rationale: obs.surfacePressureHpa < 1000
-        ? 'Severe barometric depression indicating cyclonic vortex intensification in coastal vicinity.'
-        : obs.surfacePressureHpa < 1006
-        ? 'Moderate pressure drop indicating low-pressure circulation system.'
-        : 'Surface pressure indicates standard coastal atmospheric gradient.',
+      rationale: pressRationale,
     });
 
-    // 4. Rainfall / Inundation Rate (Max 20)
-    let rainScore = 0;
+    const cycloneTotal = Math.min(100, windScore + gustScore + pressScore);
+    const cycloneCat: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' =
+      cycloneTotal >= 75 ? 'CRITICAL' : cycloneTotal >= 50 ? 'HIGH' : cycloneTotal >= 25 ? 'MODERATE' : 'LOW';
+
+    const cycloneSummary =
+      cycloneCat === 'CRITICAL'
+        ? 'Severe tropical cyclone wind & barometric depression criteria met.'
+        : cycloneCat === 'HIGH'
+        ? 'Elevated cyclonic gale winds and pressure drop detected along maritime corridor.'
+        : cycloneCat === 'MODERATE'
+        ? 'Moderate squally wind and localized atmospheric depression in vicinity.'
+        : 'Calm or nominal coastal atmospheric baseline with no cyclonic signature.';
+
+    // ==========================================
+    // SCORE 2: RAINFALL IMPACT FACTORS (0 - 100)
+    // ==========================================
+
+    // 2A. Hourly Rainfall Intensity (Max 60 points, IMD precipitation classification)
+    let rainRateScore = 0;
     let rainSev: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL' = 'NORMAL';
-    if (obs.rainfallMm >= 35) {
-      rainScore = 20;
+    if (obs.rainfallMm >= 35.0) {
+      rainRateScore = 60;
       rainSev = 'CRITICAL';
-    } else if (obs.rainfallMm >= 15) {
-      rainScore = 14;
+    } else if (obs.rainfallMm >= 15.6) {
+      rainRateScore = 50;
       rainSev = 'HIGH';
-    } else if (obs.rainfallMm >= 5) {
-      rainScore = 8;
+    } else if (obs.rainfallMm >= 7.6) {
+      rainRateScore = 40;
+      rainSev = 'HIGH';
+    } else if (obs.rainfallMm >= 2.5) {
+      rainRateScore = 25;
       rainSev = 'ELEVATED';
-    } else if (obs.rainfallMm > 0) {
-      rainScore = 3;
-      rainSev = 'NORMAL';
-    } else {
-      rainScore = 0;
+    } else if (obs.rainfallMm > 0.0) {
+      rainRateScore = 12;
       rainSev = 'NORMAL';
     }
-    totalScore += rainScore;
-    factors.push({
-      factor: 'Hourly Rainfall Rate',
+    rainfallFactors.push({
+      factor: 'Hourly Rainfall Rate (Intensity)',
       measuredValue: `${obs.rainfallMm.toFixed(1)} mm/h`,
-      threshold: '< 5 mm/h: Normal; 5-14: Moderate; 15-34: Heavy; >= 35: Torrential Inundation',
-      score: rainScore,
-      maxScore: 20,
+      threshold: '0: Nil; 0.1-2.4: Light; 2.5-7.5: Moderate; 7.6-15.5: Rather Heavy; 15.6-34.9: Heavy; >= 35: Torrential',
+      score: rainRateScore,
+      maxScore: 60,
       severity: rainSev,
-      rationale: obs.rainfallMm >= 15
-        ? 'Heavy localized precipitation. Significant waterlogging and coastal flash flood hazard.'
-        : obs.rainfallMm >= 5
-        ? 'Moderate rainfall detected. Drainage monitoring advised.'
-        : 'Negligible or light precipitation.',
+      rationale: obs.rainfallMm >= 35.0
+        ? 'IMD Torrential precipitation rate (>= 35 mm/h). Severe flash flooding and low-lying inundation imminent.'
+        : obs.rainfallMm >= 15.6
+        ? 'Heavy rainfall rate. Significant street waterlogging, canal surge, and drainage backflow hazard.'
+        : obs.rainfallMm >= 2.5
+        ? 'Moderate continuous showers. Storm-water drains operating within standard capacity.'
+        : 'Light showers or dry coastal conditions.',
     });
 
-    // Determine category
-    let riskCat: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL' = 'LOW';
-    let summary = '';
-    let recommendation = '';
-
-    if (totalScore >= 80) {
-      riskCat = 'CRITICAL';
-      summary = 'Severe meteorological conditions meeting emergency cyclonic criteria.';
-      recommendation = 'Initiate coastal evacuations to cyclone shelters; halt fishing and port operations; place emergency generators on standby.';
-    } else if (totalScore >= 55) {
-      riskCat = 'HIGH';
-      summary = 'High weather hazard from gale winds, turbulent gusts, or heavy rainfall.';
-      recommendation = 'Issue coastal gale warnings; alert district response teams; prepare multipurpose shelters for potential evacuees.';
-    } else if (totalScore >= 35) {
-      riskCat = 'ELEVATED';
-      summary = 'Elevated coastal squalls or barometric depression detected.';
-      recommendation = 'Advise fishermen against deep-sea venturing; monitor hourly barometric trend; inspect shelter drainage.';
-    } else if (totalScore >= 20) {
-      riskCat = 'MODERATE';
-      summary = 'Moderate coastal weather within manageable monsoon/seasonal margins.';
-      recommendation = 'Maintain routine coastal surveillance and verify shelter communication hotlines.';
-    } else {
-      riskCat = 'LOW';
-      summary = 'Atmospheric parameters indicate calm or nominal coastal conditions.';
-      recommendation = 'Routine disaster preparedness posture. No emergency actions required.';
+    // 2B. Preceding Precipitation Accumulation / Trend (Max 40 points)
+    let precipVolumeScore = 0;
+    let volumeSev: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL' = 'NORMAL';
+    const precipVol = obs.precipitationMm || 0;
+    if (precipVol > 30.0) {
+      precipVolumeScore = 40;
+      volumeSev = 'CRITICAL';
+    } else if (precipVol > 15.0) {
+      precipVolumeScore = 30;
+      volumeSev = 'HIGH';
+    } else if (precipVol > 5.0) {
+      precipVolumeScore = 20;
+      volumeSev = 'ELEVATED';
+    } else if (precipVol > 0.0) {
+      precipVolumeScore = 10;
+      volumeSev = 'NORMAL';
     }
+    rainfallFactors.push({
+      factor: 'Cumulative Moisture Volume',
+      measuredValue: `${precipVol.toFixed(1)} mm`,
+      threshold: '< 5 mm: Low; 5-15 mm: Moderate; 15-30 mm: Significant; > 30 mm: Severe Waterlogging',
+      score: precipVolumeScore,
+      maxScore: 40,
+      severity: volumeSev,
+      rationale: precipVol > 30.0
+        ? 'Extended cumulative precipitation volume. Soil saturation high, increasing runoff and waterlogging.'
+        : precipVol > 15.0
+        ? 'Substantial cumulative precipitation. Water accumulation in low-lying coastal pockets.'
+        : 'Cumulative precipitation volume within manageable seasonal absorption levels.',
+    });
+
+    const rainfallTotal = Math.min(100, rainRateScore + precipVolumeScore);
+    const rainfallCat: 'LOW' | 'MODERATE' | 'HEAVY' | 'TORRENTIAL' =
+      rainfallTotal >= 75 ? 'TORRENTIAL' : rainfallTotal >= 50 ? 'HEAVY' : rainfallTotal >= 25 ? 'MODERATE' : 'LOW';
+
+    const rainfallSummary =
+      rainfallCat === 'TORRENTIAL'
+        ? 'Torrential inundation risk. Active flash flood and urban waterlogging alert.'
+        : rainfallCat === 'HEAVY'
+        ? 'Heavy precipitation alert. Monitor storm-water drainage and low-lying coastal settlements.'
+        : rainfallCat === 'MODERATE'
+        ? 'Moderate seasonal monsoon rainfall detected. Standard drainage precautions apply.'
+        : 'Dry or negligible precipitation across station monitoring zone.';
+
+    // ==========================================
+    // COMPOSITE GENERAL METEOROLOGICAL SCORE (0 - 100)
+    // ==========================================
+    // Weighted combination: 60% Cyclone Wind/Pressure + 40% Rainfall Inundation
+    const compositeScore = Math.min(100, Math.round(cycloneTotal * 0.6 + rainfallTotal * 0.4));
+    const compositeCat: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL' =
+      compositeScore >= 80 ? 'CRITICAL' : compositeScore >= 55 ? 'HIGH' : compositeScore >= 35 ? 'ELEVATED' : compositeScore >= 20 ? 'MODERATE' : 'LOW';
+
+    let actionRecommendation = 'Routine disaster preparedness posture. No emergency actions required.';
+    if (compositeScore >= 80 || cycloneTotal >= 75) {
+      actionRecommendation = 'Initiate coastal evacuations to multipurpose shelters; halt fishing and port operations; place emergency generators on standby.';
+    } else if (compositeScore >= 55 || cycloneTotal >= 50 || rainfallTotal >= 50) {
+      actionRecommendation = 'Issue coastal gale/inundation warnings; alert district response teams; prepare shelters for potential evacuees.';
+    } else if (compositeScore >= 35 || cycloneTotal >= 25 || rainfallTotal >= 25) {
+      actionRecommendation = 'Advise fishermen against deep-sea venturing; monitor hourly barometric trend; inspect shelter drainage.';
+    } else if (compositeScore >= 20) {
+      actionRecommendation = 'Maintain routine coastal surveillance and verify shelter communication hotlines.';
+    }
+
+    const stationInfo = TAMIL_NADU_COASTAL_STATIONS.find((s) => s.id === obs.stationId);
 
     return {
       stationId: obs.stationId,
       locationName: obs.locationName,
       district: obs.district,
       assessedAt: new Date().toISOString(),
-      methodology: 'Rule-Based Deterministic Meteorological Matrix (IMD / WMO Thresholds) — Non-ML',
-      overallScore: totalScore,
-      riskCategory: riskCat,
-      summaryExplanation: summary,
-      actionRecommendation: recommendation,
-      contributingFactors: factors,
+      methodology: 'Dual Rule-Based Meteorological Matrices (IMD / WMO Thresholds) — Non-ML',
+
+      // Separate Score 1
+      cycloneScore: cycloneTotal,
+      cycloneCategory: cycloneCat,
+      cycloneSummary,
+      cycloneFactors,
+
+      // Separate Score 2
+      rainfallScore: rainfallTotal,
+      rainfallCategory: rainfallCat,
+      rainfallSummary,
+      rainfallFactors,
+
+      // Composite
+      overallScore: compositeScore,
+      riskCategory: compositeCat,
+      summaryExplanation: `Cyclone Impact: ${cycloneTotal}/100 (${cycloneCat}) • Rainfall Impact: ${rainfallTotal}/100 (${rainfallCat})`,
+      actionRecommendation,
+      contributingFactors: [...cycloneFactors, ...rainfallFactors],
+
+      geographicExposure: {
+        coastalZone: stationInfo?.coastalZone || 'Tamil Nadu Coastline',
+        coastalProximityKm: 1.5,
+        isHighRiskCoastalZone: stationInfo?.isHighRiskZone || false,
+        unlinkedDatasetsNotice:
+          'Physical flood inundation depth, storm surge run-up, high-resolution bathymetry, and census block structural building vulnerability require unlinked TNSDMA GIS / Survey of India datasets. Current score quantifies pure atmospheric meteorological hazard.',
+      },
       dataQuality: {
         windAvailable: obs.windSpeedKmh >= 0,
         gustAvailable: obs.windGustsKmh >= 0,
@@ -530,6 +657,48 @@ export class OpenMeteoService {
   public async getStationAssessment(station: CoastalStation, forceRefresh = false): Promise<RuleBasedRiskAssessment> {
     const obs = await this.getStationWeather(station, forceRefresh);
     return this.computeRuleBasedAssessment(obs);
+  }
+
+  /**
+   * Generates statewide risk summaries across all 14 coastal districts
+   */
+  public async getDistrictRiskSummaries(forceRefresh = false): Promise<DistrictRiskSummary[]> {
+    const observations = await this.getAllCoastalStationsWeather(forceRefresh);
+    const summaries: DistrictRiskSummary[] = [];
+
+    for (const dist of TAMIL_NADU_COASTAL_DISTRICTS) {
+      const stationObs = observations.find(
+        (o) => o.stationId === dist.stationId || o.district.toLowerCase() === dist.name.toLowerCase()
+      );
+
+      if (stationObs) {
+        const assessment = this.computeRuleBasedAssessment(stationObs);
+        summaries.push({
+          districtId: dist.id,
+          districtName: dist.name,
+          stationId: stationObs.stationId,
+          locationName: stationObs.locationName,
+          cycloneScore: assessment.cycloneScore,
+          cycloneCategory: assessment.cycloneCategory,
+          rainfallScore: assessment.rainfallScore,
+          rainfallCategory: assessment.rainfallCategory,
+          overallScore: assessment.overallScore,
+          riskScore: assessment.overallScore,
+          riskCategory: assessment.riskCategory,
+          windSpeedKmh: stationObs.windSpeedKmh,
+          windGustsKmh: stationObs.windGustsKmh,
+          surfacePressureHpa: stationObs.surfacePressureHpa,
+          rainfallMm: stationObs.rainfallMm,
+          precipitationMm: stationObs.precipitationMm,
+          rainfallDescription: stationObs.rainfallDescription,
+          actionRecommendation: assessment.actionRecommendation,
+          coastalZone: dist.coastalZone,
+          isHighRiskZone: dist.isHighRiskZone,
+        });
+      }
+    }
+
+    return summaries;
   }
 }
 

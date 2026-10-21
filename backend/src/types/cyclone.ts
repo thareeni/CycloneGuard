@@ -52,14 +52,21 @@ export interface OfficialCycloneSystem {
 }
 
 export interface IMDIntegrationStatus {
-  provider: 'India Meteorological Department (RSMC New Delhi)';
+  provider: string;
+  secondaryProvider?: string;
   apiBaseUrl: string;
   portalUrl: string;
   nodalContact: string;
   configured: boolean;
-  status: 'PENDING_CREDENTIALS' | 'NO_ACTIVE_CYCLONE' | 'ACTIVE_CYCLONE_TRACKED' | 'SERVICE_UNAVAILABLE';
+  status:
+    | 'PENDING_CREDENTIALS'
+    | 'NO_ACTIVE_CYCLONE'
+    | 'ACTIVE_CYCLONE_TRACKED'
+    | 'SERVICE_UNAVAILABLE'
+    | 'STALE_DATA';
   statusDescription: string;
   instructions: string;
+  dataFreshness?: 'LIVE_REALTIME' | 'RECENT_CACHE' | 'STALE';
   lastCheckedAt: string;
 }
 

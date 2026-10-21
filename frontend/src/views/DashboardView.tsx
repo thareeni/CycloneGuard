@@ -4,6 +4,7 @@ import {
   CycloneStatusResponse,
   Shelter,
   NavigationTab,
+  CoastalDistrict,
 } from '../types';
 import { LiveWeatherCard } from '../components/LiveWeatherCard';
 import { CycloneStatusBanner } from '../components/CycloneStatusBanner';
@@ -18,6 +19,7 @@ import {
   Droplets,
   MapPin,
   ExternalLink,
+  Phone,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -27,6 +29,9 @@ interface DashboardViewProps {
   cycloneData: CycloneStatusResponse | null;
   shelters: Shelter[];
   onNavigateTab: (tab: NavigationTab) => void;
+  districts?: CoastalDistrict[];
+  selectedDistrict?: string;
+  onSelectDistrict?: (districtName: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -36,8 +41,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   cycloneData,
   shelters,
   onNavigateTab,
+  districts = [],
+  selectedDistrict = 'ALL',
+  onSelectDistrict: _onSelectDistrict,
 }) => {
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'NORTH' | 'DELTA' | 'SOUTH'>('ALL');
+
+  const activeDistrictObj = districts.find(
+    (d) => d.name.toLowerCase() === selectedDistrict.toLowerCase()
+  );
+
+  const districtShelters = shelters.filter(
+    (s) => s.districtName.toLowerCase() === selectedDistrict.toLowerCase()
+  );
 
   // Aggregate Risk Metrics
   const maxWind = stations.length > 0
@@ -75,6 +91,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Official IMD Cyclone Status / Warnings */}
       <CycloneStatusBanner cycloneData={cycloneData} />
+
+      {/* District Operational Status Banner */}
+      {selectedDistrict !== 'ALL' && activeDistrictObj && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #0e1e38 0%, #0d1527 100%)',
+            border: '1px solid #2563eb',
+            borderRadius: '0.5rem',
+            padding: '1rem 1.25rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="badge badge-official">DISTRICT OPERATIONAL FOCUS</span>
+              {activeDistrictObj.isHighRiskZone && (
+                <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171' }}>
+                  ⚠️ HIGH RISK COASTAL ZONE
+                </span>
+              )}
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.25rem' }}>
+              {activeDistrictObj.name} District Command
+            </h3>
+            <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+              Headquarters: <strong style={{ color: '#cbd5e1' }}>{activeDistrictObj.headquarters}</strong> •
+              Zone: <span style={{ color: '#38bdf8' }}>{activeDistrictObj.coastalZone}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ background: '#162238', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', border: '1px solid #243552' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Emergency Control Room:</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Phone size={13} /> {activeDistrictObj.emergencyControlRoomPhone}
+              </div>
+            </div>
+
+            <div style={{ background: '#162238', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', border: '1px solid #243552' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Shelters in District:</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: districtShelters.length > 0 ? '#34d399' : '#fbbf24' }}>
+                {districtShelters.length} Shelters ({districtShelters.reduce((acc, s) => acc + s.availableCapacity, 0)} available spaces)
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Coastal Risk Overview KPI Strip */}
       <div style={{
@@ -154,19 +221,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             marginBottom: '1.25rem',
           }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
                 <span className="badge badge-live">
                   <span className="pulse-dot"></span> LIVE OPEN-METEO
                 </span>
                 <span style={{
                   fontSize: '0.72rem',
                   fontWeight: 700,
-                  color: selectedStation.cycloneRiskIndex === 'NORMAL' ? '#10b981' : '#f59e0b',
-                  background: 'rgba(255, 255, 255, 0.05)',
+                  color: (selectedStation.cycloneScore ?? selectedStation.riskScore) >= 50 ? '#f87171' : '#38bdf8',
+                  background: 'rgba(56, 189, 248, 0.1)',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
                   padding: '0.15rem 0.5rem',
                   borderRadius: '0.25rem',
                 }}>
-                  {selectedStation.cycloneRiskIndex} RISK
+                  Cyclone Impact: {selectedStation.cycloneScore ?? selectedStation.riskScore ?? 12}/100 ({selectedStation.cycloneCategory ?? 'LOW'})
+                </span>
+                <span style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  color: (selectedStation.rainfallScore ?? 8) >= 50 ? '#60a5fa' : '#34d399',
+                  background: 'rgba(52, 211, 153, 0.1)',
+                  border: '1px solid rgba(52, 211, 153, 0.25)',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '0.25rem',
+                }}>
+                  Rainfall Impact: {selectedStation.rainfallScore ?? 8}/100 ({selectedStation.rainfallCategory ?? 'LOW'})
                 </span>
               </div>
               <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc' }}>
@@ -226,7 +305,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {selectedStation.rainfallMm.toFixed(1)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>mm/h</span>
               </div>
               <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                Precip: {selectedStation.precipitationMm.toFixed(1)} mm
+                {selectedStation.rainfallDescription || (selectedStation.precipitationMm > 0 ? `Precip: ${selectedStation.precipitationMm.toFixed(1)} mm` : 'Nil precipitation')}
               </div>
             </div>
 

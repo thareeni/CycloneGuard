@@ -72,6 +72,14 @@ export interface LiveWeatherObservation {
   weatherCondition: string;
   isDay: boolean;
   cycloneRiskIndex: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  cycloneScore?: number;
+  cycloneCategory?: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  rainfallScore?: number;
+  rainfallCategory?: 'LOW' | 'MODERATE' | 'HEAVY' | 'TORRENTIAL';
+  riskScore: number;
+  riskCategory: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  dataFreshness: 'LIVE' | 'CACHED' | 'STALE';
+  rainfallDescription?: string;
   observedAt: string;
   hourlyForecast: HourlyForecastPoint[];
   metadata: {
@@ -228,11 +236,32 @@ export interface RuleBasedRiskAssessment {
   district: string;
   assessedAt: string;
   methodology: string;
+
+  // Separate Score 1: Cyclone Impact Score (0 - 100)
+  cycloneScore: number;
+  cycloneCategory: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  cycloneSummary: string;
+  cycloneFactors: RiskFactor[];
+
+  // Separate Score 2: Rainfall Impact Score (0 - 100)
+  rainfallScore: number;
+  rainfallCategory: 'LOW' | 'MODERATE' | 'HEAVY' | 'TORRENTIAL';
+  rainfallSummary: string;
+  rainfallFactors: RiskFactor[];
+
+  // Composite / General Impact Score
   overallScore: number;
   riskCategory: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
   summaryExplanation: string;
   actionRecommendation: string;
   contributingFactors: RiskFactor[];
+
+  geographicExposure: {
+    coastalZone: string;
+    coastalProximityKm: number;
+    isHighRiskCoastalZone: boolean;
+    unlinkedDatasetsNotice: string;
+  };
   dataQuality: {
     windAvailable: boolean;
     gustAvailable: boolean;
@@ -240,5 +269,35 @@ export interface RuleBasedRiskAssessment {
     rainAvailable: boolean;
     missingParamsCount: number;
   };
+}
+
+export interface DistrictRiskSummary {
+  districtId: number;
+  districtName: string;
+  stationId: string;
+  locationName: string;
+
+  // Separate Score 1: Cyclone Impact Score
+  cycloneScore: number;
+  cycloneCategory: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+
+  // Separate Score 2: Rainfall Impact Score
+  rainfallScore: number;
+  rainfallCategory: 'LOW' | 'MODERATE' | 'HEAVY' | 'TORRENTIAL';
+
+  // Composite
+  overallScore: number;
+  riskScore: number;
+  riskCategory: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+
+  windSpeedKmh: number;
+  windGustsKmh: number;
+  surfacePressureHpa: number;
+  rainfallMm: number;
+  precipitationMm?: number;
+  rainfallDescription?: string;
+  actionRecommendation: string;
+  coastalZone: string;
+  isHighRiskZone: boolean;
 }
 

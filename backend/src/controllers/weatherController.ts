@@ -113,6 +113,31 @@ export class WeatherController {
       });
     }
   }
+
+  /**
+   * GET /api/weather/assessment/districts
+   * Statewide risk summary across all 14 coastal districts
+   */
+  public async getDistrictRiskSummaries(req: Request, res: Response) {
+    try {
+      const refresh = req.query.refresh === 'true';
+      const summaries = await openMeteoService.getDistrictRiskSummaries(refresh);
+      res.json({
+        success: true,
+        methodology: 'Rule-Based Deterministic Meteorological Matrix (IMD/WMO Criteria)',
+        aiDisclaimer: 'Calculated using transparent physical threshold rules, NOT AI/ML model output.',
+        count: summaries.length,
+        districtsCount: summaries.length,
+        data: summaries,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve district risk summaries',
+        error: error.message,
+      });
+    }
+  }
 }
 
 export const weatherController = new WeatherController();

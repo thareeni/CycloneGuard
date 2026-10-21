@@ -45,4 +45,12 @@ export const config = {
     uri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cycloneguard',
     dbName: process.env.MONGODB_DB_NAME || 'cycloneguard',
   },
+
+  // Authentication & Security (Single Authorized Admin)
+  auth: {
+    adminEmail: (process.env.ADMIN_EMAIL || 'admin@cycloneguard.tn.gov.in').toLowerCase().trim(),
+    adminPassword: process.env.ADMIN_INITIAL_PASSWORD || process.env.ADMIN_PASSWORD || 'Admin@Cyclone2026!',
+    jwtSecret: process.env.JWT_SECRET || 'cycloneguard-ultra-secure-hmac-sha256-secret-key-2026',
+    jwtExpiresInSeconds: parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '86400', 10),
+  },
 };

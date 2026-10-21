@@ -13,17 +13,6 @@ export const LiveWeatherCard: React.FC<LiveWeatherCardProps> = ({
   isSelected,
   onSelect,
 }) => {
-  const getRiskColor = (risk: string) => {
-    switch (risk) {
-      case 'CRITICAL': return '#ef4444';
-      case 'HIGH': return '#f97316';
-      case 'ELEVATED': return '#f59e0b';
-      default: return '#10b981';
-    }
-  };
-
-  const riskColor = getRiskColor(observation.cycloneRiskIndex);
-
   return (
     <div
       onClick={onSelect}
@@ -53,18 +42,34 @@ export const LiveWeatherCard: React.FC<LiveWeatherCardProps> = ({
             <span className="badge badge-live">
               <span className="pulse-dot"></span> LIVE API
             </span>
-            <span
-              style={{
-                fontSize: '0.68rem',
-                fontWeight: 700,
-                color: riskColor,
-                background: `rgba(${riskColor === '#ef4444' ? '239, 68, 68' : '16, 185, 129'}, 0.12)`,
-                padding: '0.15rem 0.45rem',
-                borderRadius: '0.25rem',
-              }}
-            >
-              {observation.cycloneRiskIndex} RISK
-            </span>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <span
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  color: (observation.cycloneScore ?? observation.riskScore) >= 50 ? '#f87171' : '#38bdf8',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  padding: '0.12rem 0.4rem',
+                  borderRadius: '0.25rem',
+                }}
+                title="Cyclone Impact Score (Wind & Barometric Pressure Hazard)"
+              >
+                Cyclone: {observation.cycloneScore ?? observation.riskScore ?? 12}/100
+              </span>
+              <span
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  color: (observation.rainfallScore ?? 8) >= 50 ? '#60a5fa' : '#34d399',
+                  background: 'rgba(52, 211, 153, 0.12)',
+                  padding: '0.12rem 0.4rem',
+                  borderRadius: '0.25rem',
+                }}
+                title="Rainfall Impact Score (Hourly Intensity & Volume Inundation)"
+              >
+                Rain: {observation.rainfallScore ?? 8}/100
+              </span>
+            </div>
           </div>
         </div>
 
@@ -127,10 +132,13 @@ export const LiveWeatherCard: React.FC<LiveWeatherCardProps> = ({
           {/* Rainfall */}
           <div style={{ background: '#0d1524', padding: '0.6rem 0.75rem', borderRadius: '0.375rem', border: '1px solid #1c2a3f' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#94a3b8', fontSize: '0.72rem', marginBottom: '0.2rem' }}>
-              <CloudRain size={14} color="#60a5fa" /> Current Rain
+              <CloudRain size={14} color="#60a5fa" /> Hourly Rain
             </div>
             <div style={{ fontSize: '1.05rem', fontWeight: 700, color: observation.rainfallMm > 10 ? '#38bdf8' : '#f1f5f9' }}>
               {observation.rainfallMm.toFixed(1)} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#94a3b8' }}>mm/h</span>
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {observation.rainfallDescription || (observation.precipitationMm > 0 ? `Vol: ${observation.precipitationMm.toFixed(1)}mm` : 'Nil precip')}
             </div>
           </div>
 

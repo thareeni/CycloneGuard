@@ -43,46 +43,62 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
   districts = [],
   selectedDistrict = 'ALL',
-  onSelectDistrict: _onSelectDistrict,
+  onSelectDistrict,
 }) => {
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'NORTH' | 'DELTA' | 'SOUTH'>('ALL');
 
+  const normalizeDistrict = (name?: string) => {
+    if (!name) return '';
+    const clean = name.toLowerCase().replace(/[^a-z]/g, '');
+    if (clean.includes('kanya') || clean.includes('kanni')) return 'kanniyakumari';
+    return clean;
+  };
+
+  const isDistrictFiltered = selectedDistrict !== 'ALL';
+
   const activeDistrictObj = districts.find(
-    (d) => d.name.toLowerCase() === selectedDistrict.toLowerCase()
+    (d) => normalizeDistrict(d.name) === normalizeDistrict(selectedDistrict)
   );
 
-  const districtShelters = shelters.filter(
-    (s) => s.districtName.toLowerCase() === selectedDistrict.toLowerCase()
-  );
+  const displayedShelters = isDistrictFiltered
+    ? shelters.filter((s) => normalizeDistrict(s.districtName) === normalizeDistrict(selectedDistrict))
+    : shelters;
 
-  // Aggregate Risk Metrics
-  const maxWind = stations.length > 0
-    ? Math.max(...stations.map((s) => s.windSpeedKmh))
+  const districtStations = isDistrictFiltered
+    ? stations.filter((st) => normalizeDistrict(st.district) === normalizeDistrict(selectedDistrict))
+    : stations;
+
+  const displayedStations = isDistrictFiltered
+    ? districtStations
+    : stations.filter((st) => {
+        if (zoneFilter === 'ALL') return true;
+        const id = st.stationId.toLowerCase();
+        if (zoneFilter === 'NORTH') {
+          return ['chennai', 'tiruvallur', 'chengalpattu', 'villupuram'].includes(id);
+        }
+        if (zoneFilter === 'DELTA') {
+          return ['cuddalore', 'mayiladuthurai', 'nagapattinam'].includes(id);
+        }
+        if (zoneFilter === 'SOUTH') {
+          return ['tiruvarur', 'thanjavur', 'pudukkottai', 'rameshwaram', 'thoothukudi', 'tirunelveli', 'kanyakumari'].includes(id);
+        }
+        return true;
+      });
+
+  // Aggregate Risk Metrics (based on active set)
+  const activeMetricsPool = displayedStations.length > 0 ? displayedStations : stations;
+  const maxWind = activeMetricsPool.length > 0
+    ? Math.max(...activeMetricsPool.map((s) => s.windSpeedKmh))
     : 0;
-  const maxGust = stations.length > 0
-    ? Math.max(...stations.map((s) => s.windGustsKmh))
+  const maxGust = activeMetricsPool.length > 0
+    ? Math.max(...activeMetricsPool.map((s) => s.windGustsKmh))
     : 0;
-  const minPressure = stations.length > 0
-    ? Math.min(...stations.filter((s) => s.surfacePressureHpa > 0).map((s) => s.surfacePressureHpa))
+  const minPressure = activeMetricsPool.length > 0
+    ? Math.min(...activeMetricsPool.filter((s) => s.surfacePressureHpa > 0).map((s) => s.surfacePressureHpa))
     : 1012;
-  const highRiskStations = stations.filter(
+  const highRiskStations = activeMetricsPool.filter(
     (s) => s.cycloneRiskIndex === 'HIGH' || s.cycloneRiskIndex === 'CRITICAL'
   );
-
-  const filteredStations = stations.filter((st) => {
-    if (zoneFilter === 'ALL') return true;
-    const id = st.stationId.toLowerCase();
-    if (zoneFilter === 'NORTH') {
-      return ['chennai', 'tiruvallur', 'chengalpattu', 'villupuram'].includes(id);
-    }
-    if (zoneFilter === 'DELTA') {
-      return ['cuddalore', 'mayiladuthurai', 'nagapattinam'].includes(id);
-    }
-    if (zoneFilter === 'SOUTH') {
-      return ['tiruvarur', 'thanjavur', 'pudukkottai', 'rameshwaram', 'thoothukudi', 'tirunelveli', 'kanyakumari'].includes(id);
-    }
-    return true;
-  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -135,8 +151,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <div style={{ background: '#162238', padding: '0.5rem 0.85rem', borderRadius: '0.375rem', border: '1px solid #243552' }}>
               <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Shelters in District:</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: districtShelters.length > 0 ? '#34d399' : '#fbbf24' }}>
-                {districtShelters.length} Shelters ({districtShelters.reduce((acc, s) => acc + s.availableCapacity, 0)} available spaces)
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: displayedShelters.length > 0 ? '#34d399' : '#fbbf24' }}>
+                {displayedShelters.length} Shelters ({displayedShelters.reduce((acc: number, s: Shelter) => acc + s.availableCapacity, 0)} available spaces)
               </div>
             </div>
           </div>
@@ -155,10 +171,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Monitored Coastal Stations
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#38bdf8' }}>
-            {stations.length} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#94a3b8' }}>Locations</span>
+            {isDistrictFiltered ? displayedStations.length : stations.length}{' '}
+            <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#94a3b8' }}>
+              {isDistrictFiltered ? (displayedStations.length === 1 ? 'Station' : 'Stations') : 'Locations'}
+            </span>
           </div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
-            Across 14 coastal monitoring stations in Tamil Nadu
+            {isDistrictFiltered
+              ? `Operational monitoring in ${selectedDistrict} district`
+              : 'Across 14 coastal monitoring stations in Tamil Nadu'}
           </div>
         </div>
 
@@ -393,81 +414,122 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          {/* Coastal Zone Filter Chips */}
-          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setZoneFilter('ALL')}
-              style={{
-                background: zoneFilter === 'ALL' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
-                border: zoneFilter === 'ALL' ? '1px solid #38bdf8' : '1px solid #283e60',
-                color: zoneFilter === 'ALL' ? '#38bdf8' : '#cbd5e1',
-                padding: '0.3rem 0.65rem',
-                borderRadius: '0.375rem',
-                fontSize: '0.75rem',
-                fontWeight: zoneFilter === 'ALL' ? 700 : 500,
-                cursor: 'pointer',
-              }}
-            >
-              All ({stations.length})
-            </button>
-            <button
-              onClick={() => setZoneFilter('NORTH')}
-              style={{
-                background: zoneFilter === 'NORTH' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
-                border: zoneFilter === 'NORTH' ? '1px solid #38bdf8' : '1px solid #283e60',
-                color: zoneFilter === 'NORTH' ? '#38bdf8' : '#cbd5e1',
-                padding: '0.3rem 0.65rem',
-                borderRadius: '0.375rem',
-                fontSize: '0.75rem',
-                fontWeight: zoneFilter === 'NORTH' ? 700 : 500,
-                cursor: 'pointer',
-              }}
-            >
-              North Coast (4)
-            </button>
-            <button
-              onClick={() => setZoneFilter('DELTA')}
-              style={{
-                background: zoneFilter === 'DELTA' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
-                border: zoneFilter === 'DELTA' ? '1px solid #38bdf8' : '1px solid #283e60',
-                color: zoneFilter === 'DELTA' ? '#38bdf8' : '#cbd5e1',
-                padding: '0.3rem 0.65rem',
-                borderRadius: '0.375rem',
-                fontSize: '0.75rem',
-                fontWeight: zoneFilter === 'DELTA' ? 700 : 500,
-                cursor: 'pointer',
-              }}
-            >
-              Central Delta (3)
-            </button>
-            <button
-              onClick={() => setZoneFilter('SOUTH')}
-              style={{
-                background: zoneFilter === 'SOUTH' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
-                border: zoneFilter === 'SOUTH' ? '1px solid #38bdf8' : '1px solid #283e60',
-                color: zoneFilter === 'SOUTH' ? '#38bdf8' : '#cbd5e1',
-                padding: '0.3rem 0.65rem',
-                borderRadius: '0.375rem',
-                fontSize: '0.75rem',
-                fontWeight: zoneFilter === 'SOUTH' ? 700 : 500,
-                cursor: 'pointer',
-              }}
-            >
-              Palk Bay & South (7)
-            </button>
-          </div>
+          {/* Filter Controls: District Alert Chip or Coastal Zone Filter Chips */}
+          {isDistrictFiltered ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  background: 'rgba(14, 165, 233, 0.15)',
+                  border: '1px solid #0284c7',
+                  color: '#38bdf8',
+                  fontSize: '0.75rem',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '0.375rem',
+                  fontWeight: 600,
+                }}
+              >
+                District Focus: <strong>{selectedDistrict}</strong> ({displayedStations.length} station, {displayedShelters.length} shelters)
+              </span>
+              {onSelectDistrict && (
+                <button
+                  onClick={() => onSelectDistrict('ALL')}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}
+                >
+                  Show All Districts
+                </button>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setZoneFilter('ALL')}
+                style={{
+                  background: zoneFilter === 'ALL' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
+                  border: zoneFilter === 'ALL' ? '1px solid #38bdf8' : '1px solid #283e60',
+                  color: zoneFilter === 'ALL' ? '#38bdf8' : '#cbd5e1',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  fontWeight: zoneFilter === 'ALL' ? 700 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                All ({stations.length})
+              </button>
+              <button
+                onClick={() => setZoneFilter('NORTH')}
+                style={{
+                  background: zoneFilter === 'NORTH' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
+                  border: zoneFilter === 'NORTH' ? '1px solid #38bdf8' : '1px solid #283e60',
+                  color: zoneFilter === 'NORTH' ? '#38bdf8' : '#cbd5e1',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  fontWeight: zoneFilter === 'NORTH' ? 700 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                North Coast (4)
+              </button>
+              <button
+                onClick={() => setZoneFilter('DELTA')}
+                style={{
+                  background: zoneFilter === 'DELTA' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
+                  border: zoneFilter === 'DELTA' ? '1px solid #38bdf8' : '1px solid #283e60',
+                  color: zoneFilter === 'DELTA' ? '#38bdf8' : '#cbd5e1',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  fontWeight: zoneFilter === 'DELTA' ? 700 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Central Delta (3)
+              </button>
+              <button
+                onClick={() => setZoneFilter('SOUTH')}
+                style={{
+                  background: zoneFilter === 'SOUTH' ? 'rgba(14, 165, 233, 0.2)' : '#162238',
+                  border: zoneFilter === 'SOUTH' ? '1px solid #38bdf8' : '1px solid #283e60',
+                  color: zoneFilter === 'SOUTH' ? '#38bdf8' : '#cbd5e1',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  fontWeight: zoneFilter === 'SOUTH' ? 700 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Palk Bay & South (7)
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="grid-cards">
-          {filteredStations.map((st) => (
-            <LiveWeatherCard
-              key={st.stationId}
-              observation={st}
-              isSelected={st.stationId.toLowerCase() === selectedStation?.stationId.toLowerCase()}
-              onSelect={() => onSelectStation(st.stationId)}
-            />
-          ))}
-        </div>
+        {displayedStations.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8' }}>
+            <CloudRain size={32} color="#38bdf8" style={{ margin: '0 auto 0.75rem auto' }} />
+            <h4 style={{ color: '#f1f5f9', marginBottom: '0.25rem', fontSize: '1rem' }}>
+              No Coastal Weather Stations to Display
+            </h4>
+            <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {isDistrictFiltered
+                ? `No weather monitoring station is currently mapped for ${selectedDistrict} district.`
+                : 'Coastal weather observations are currently synchronizing with Open-Meteo telemetry services.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid-cards">
+            {displayedStations.map((st) => (
+              <LiveWeatherCard
+                key={st.stationId}
+                observation={st}
+                isSelected={st.stationId.toLowerCase() === selectedStation?.stationId.toLowerCase()}
+                onSelect={() => onSelectStation(st.stationId)}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Small Interactive Map Preview with Jump Button */}
@@ -499,15 +561,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div style={{ height: '360px' }}>
-          <MapView
-            weatherStations={stations}
-            shelters={shelters}
-            cycloneSystems={cycloneData?.systems}
-            selectedStationId={selectedStation?.stationId}
-            onSelectStation={onSelectStation}
-          />
-        </div>
+        <MapView
+          weatherStations={displayedStations}
+          shelters={displayedShelters}
+          cycloneSystems={cycloneData?.systems}
+          selectedStationId={selectedStation?.stationId}
+          onSelectStation={onSelectStation}
+          selectedDistrict={selectedDistrict}
+        />
       </section>
     </div>
   );

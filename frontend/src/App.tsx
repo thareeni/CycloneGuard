@@ -48,11 +48,26 @@ export function App() {
             console.warn('Health check failed:', e);
             return null;
           }),
-          api.getDistricts().catch(() => []),
-          api.getCoastalWeather(forceRefresh),
-          api.getCycloneStatus(),
-          api.getShelters(),
-          api.getInventory(),
+          api.getDistricts().catch((e) => {
+            console.warn('Districts fetch failed:', e);
+            return [];
+          }),
+          api.getCoastalWeather(forceRefresh).catch((e) => {
+            console.warn('Weather fetch failed:', e);
+            return [];
+          }),
+          api.getCycloneStatus().catch((e) => {
+            console.warn('Cyclone fetch failed:', e);
+            return null;
+          }),
+          api.getShelters().catch((e) => {
+            console.warn('Shelters fetch failed:', e);
+            return [];
+          }),
+          api.getInventory().catch((e) => {
+            console.warn('Inventory fetch failed:', e);
+            return [];
+          }),
           api.getMe().catch(() => null),
         ]);
 
@@ -239,8 +254,6 @@ export function App() {
               selectedStation={selectedStation}
               onSelectStation={(id) => {
                 setSelectedStationId(id);
-                const st = weatherStations.find((s) => s.stationId.toLowerCase() === id.toLowerCase());
-                if (st) setSelectedDistrict(st.district);
               }}
               cycloneData={cycloneData}
               shelters={shelters}
@@ -257,11 +270,12 @@ export function App() {
               selectedStation={selectedStation}
               onSelectStation={(id) => {
                 setSelectedStationId(id);
-                const st = weatherStations.find((s) => s.stationId.toLowerCase() === id.toLowerCase());
-                if (st) setSelectedDistrict(st.district);
               }}
               cycloneData={cycloneData}
               shelters={shelters}
+              selectedDistrict={selectedDistrict}
+              districts={districts}
+              onSelectDistrict={handleSelectDistrict}
             />
           )}
 

@@ -19,6 +19,7 @@ interface MapViewProps {
   };
   onClearRoute?: () => void;
   userLocation?: [number, number] | null;
+  selectedDistrict?: string;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -31,6 +32,7 @@ export const MapView: React.FC<MapViewProps> = ({
   activeRouteInfo,
   onClearRoute,
   userLocation,
+  selectedDistrict,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -50,7 +52,7 @@ export const MapView: React.FC<MapViewProps> = ({
     if (mapInstanceRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [11.1, 79.5],
+      center: [11.1271, 79.35],
       zoom: 7,
       minZoom: 5,
       maxZoom: 14,
@@ -69,11 +71,49 @@ export const MapView: React.FC<MapViewProps> = ({
 
     mapInstanceRef.current = map;
 
+    // Invalidate size once DOM finishes initial rendering
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
     return () => {
+      clearTimeout(timer);
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Fit map bounds to encompass all visible markers (shelters and weather stations)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const points: [number, number][] = [];
+
+    if (showShelters && shelters && shelters.length > 0) {
+      shelters.forEach((s) => {
+        if (typeof s.latitude === 'number' && typeof s.longitude === 'number' && !isNaN(s.latitude) && !isNaN(s.longitude)) {
+          points.push([s.latitude, s.longitude]);
+        }
+      });
+    }
+
+    if (showWeather && weatherStations && weatherStations.length > 0) {
+      weatherStations.forEach((s) => {
+        if (typeof s.latitude === 'number' && typeof s.longitude === 'number' && !isNaN(s.latitude) && !isNaN(s.longitude)) {
+          points.push([s.latitude, s.longitude]);
+        }
+      });
+    }
+
+    if (points.length > 0) {
+      const bounds = L.latLngBounds(points);
+      mapInstanceRef.current.fitBounds(bounds, {
+        padding: [30, 30],
+        maxZoom: selectedDistrict && selectedDistrict !== 'ALL' ? 11 : 8,
+      });
+    } else {
+      mapInstanceRef.current.setView([11.1271, 79.35], 7);
+    }
+  }, [weatherStations, shelters, showWeather, showShelters, selectedDistrict]);
 
   // Smoothly pan to selected station
   useEffect(() => {
@@ -82,7 +122,7 @@ export const MapView: React.FC<MapViewProps> = ({
       (s) => s.stationId.toLowerCase() === selectedStationId.toLowerCase()
     );
     if (target) {
-      mapInstanceRef.current.flyTo([target.latitude, target.longitude], 9, {
+      mapInstanceRef.current.flyTo([target.latitude, target.longitude], 10, {
         duration: 1.0,
       });
     }
@@ -129,22 +169,24 @@ export const MapView: React.FC<MapViewProps> = ({
       const marker = L.marker([station.latitude, station.longitude], { icon: customIcon });
 
       const popupContent = `
-        <div style="font-family: inherit; min-width: 200px; padding: 4px;">
+        <div style="font-family: inherit; min-width: 210px; padding: 4px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <strong style="color: #38bdf8; font-size: 13px;">${station.locationName}</strong>
-            <span style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 99px;">
+            <span style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 99px;">
               ${station.district}
             </span>
           </div>
           <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
-            <div>🌡️ <strong>Temp:</strong> ${station.temperatureCelsius.toFixed(1)}°C (Feels ${station.apparentTemperatureCelsius.toFixed(1)}°C)</div>
-            <div>💨 <strong>Wind:</strong> ${station.windSpeedKmh.toFixed(1)} km/h (Gusts: ${station.windGustsKmh.toFixed(1)} km/h)</div>
-            <div>⏲️ <strong>Pressure:</strong> ${station.surfacePressureHpa > 0 ? station.surfacePressureHpa.toFixed(1) + ' hPa' : 'N/A'}</div>
+            <div>🌤️ <strong>Weather Status:</strong> <span style="font-weight: 700; color: #f8fafc;">${station.weatherCondition}</span></div>
+            <div>🌡️ <strong>Current Temperature:</strong> ${station.temperatureCelsius.toFixed(1)}°C (Feels ${station.apparentTemperatureCelsius.toFixed(1)}°C)</div>
+            <div>💨 <strong>Wind Speed:</strong> ${station.windSpeedKmh.toFixed(1)} km/h (Gusts: ${station.windGustsKmh.toFixed(1)} km/h)</div>
+            <div>⏲️ <strong>Barometric Pressure:</strong> ${station.surfacePressureHpa > 0 ? station.surfacePressureHpa.toFixed(1) + ' hPa' : 'N/A'}</div>
             <div>🌧️ <strong>Rainfall:</strong> ${station.rainfallMm.toFixed(1)} mm/h</div>
-            <div>⚠️ <strong>Risk Index:</strong> <span style="font-weight: 700; color: ${station.cycloneRiskIndex === 'CRITICAL' ? '#ef4444' : station.cycloneRiskIndex === 'HIGH' ? '#f97316' : '#38bdf8'}">${station.cycloneRiskIndex}</span></div>
+            <div>⚠️ <strong>Cyclone Risk Index:</strong> <span style="font-weight: 700; color: ${station.cycloneRiskIndex === 'CRITICAL' ? '#ef4444' : station.cycloneRiskIndex === 'HIGH' ? '#f97316' : '#38bdf8'}">${station.cycloneRiskIndex}</span></div>
+            <div>📡 <strong>Freshness:</strong> <span style="font-weight: 600; color: ${station.dataFreshness === 'LIVE' ? '#34d399' : '#fbbf24'}">${station.dataFreshness}</span></div>
           </div>
           <div style="font-size: 9px; color: #64748b; margin-top: 6px; border-top: 1px solid #24344d; padding-top: 4px;">
-            Source: ${station.metadata.source}
+            Source: ${station.metadata?.source || 'Open-Meteo API'} • Observed: ${station.observedAt ? new Date(station.observedAt).toLocaleTimeString() : 'Recent'}
           </div>
         </div>
       `;
@@ -198,17 +240,19 @@ export const MapView: React.FC<MapViewProps> = ({
       const marker = L.marker([shelter.latitude, shelter.longitude], { icon: customIcon });
 
       const popupContent = `
-        <div style="font-family: inherit; min-width: 220px; padding: 4px;">
+        <div style="font-family: inherit; min-width: 230px; padding: 4px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <strong style="color: #fbbf24; font-size: 13px;">${shelter.name}</strong>
-            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 99px;">
+            <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 99px;">
               ${shelter.status}
             </span>
           </div>
-          <div style="font-size: 11px; color: #cbd5e1; line-height: 1.5;">
-            <div>📍 ${shelter.address}</div>
-            <div>👥 <strong>Capacity:</strong> ${shelter.totalCapacity.toLocaleString()} (Available: ${shelter.availableCapacity.toLocaleString()})</div>
-            <div>⚡ <strong>Generator:</strong> ${shelter.facilities.hasGenerator ? 'Yes' : 'No'} | <strong>Medical:</strong> ${shelter.facilities.hasMedicalPost ? 'Yes' : 'No'}</div>
+          <div style="font-size: 11px; color: #cbd5e1; line-height: 1.55;">
+            <div>🏛️ <strong>District:</strong> <span style="font-weight: 700; color: #38bdf8;">${shelter.districtName}</span></div>
+            <div>👥 <strong>Total Capacity:</strong> ${shelter.totalCapacity.toLocaleString()} persons</div>
+            <div>📊 <strong>Occupancy:</strong> <strong style="color: ${shelter.currentOccupancy > 0 ? '#fbbf24' : '#34d399'};">${shelter.currentOccupancy.toLocaleString()}</strong> (${shelter.occupancyPercentage}% full) • <strong>${shelter.availableCapacity.toLocaleString()}</strong> available</div>
+            <div>📍 <strong>Address:</strong> ${shelter.address}</div>
+            <div>⚡ <strong>Facilities:</strong> Generator: ${shelter.facilities?.hasGenerator ? 'Yes' : 'No'} | Medical: ${shelter.facilities?.hasMedicalPost ? 'Yes' : 'No'} | Water: ${shelter.facilities?.hasDrinkingWater ? 'Yes' : 'No'}</div>
             <div>📞 <strong>Contact:</strong> ${shelter.contactPerson} (${shelter.contactPhone})</div>
           </div>
           <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #24344d; display: flex; justify-content: space-between; align-items: center;">

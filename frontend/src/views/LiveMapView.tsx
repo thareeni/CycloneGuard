@@ -4,6 +4,7 @@ import {
   CycloneStatusResponse,
   Shelter,
   NearestShelterRecommendation,
+  CoastalDistrict,
 } from '../types';
 import { MapView } from '../components/MapView';
 import { api } from '../services/api';
@@ -25,6 +26,9 @@ interface LiveMapViewProps {
   onSelectStation: (stationId: string) => void;
   cycloneData: CycloneStatusResponse | null;
   shelters: Shelter[];
+  selectedDistrict?: string;
+  districts?: CoastalDistrict[];
+  onSelectDistrict?: (districtName: string) => void;
 }
 
 export const LiveMapView: React.FC<LiveMapViewProps> = ({
@@ -33,7 +37,27 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
   onSelectStation,
   cycloneData,
   shelters,
+  selectedDistrict = 'ALL',
+  districts: _districts = [],
+  onSelectDistrict,
 }) => {
+  const normalizeDistrict = (name?: string) => {
+    if (!name) return '';
+    const clean = name.toLowerCase().replace(/[^a-z]/g, '');
+    if (clean.includes('kanya') || clean.includes('kanni')) return 'kanniyakumari';
+    return clean;
+  };
+
+  const isDistrictFiltered = selectedDistrict !== 'ALL';
+
+  const displayedStations = isDistrictFiltered
+    ? stations.filter((s) => normalizeDistrict(s.district) === normalizeDistrict(selectedDistrict))
+    : stations;
+
+  const displayedShelters = isDistrictFiltered
+    ? shelters.filter((s) => normalizeDistrict(s.districtName) === normalizeDistrict(selectedDistrict))
+    : shelters;
+
   const [activeSideTab, setActiveSideTab] = useState<'station' | 'cyclone' | 'evacuation'>('station');
 
   // Geolocation state
@@ -266,8 +290,8 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
         {/* Left: Map View */}
         <div>
           <MapView
-            weatherStations={stations}
-            shelters={shelters}
+            weatherStations={displayedStations}
+            shelters={displayedShelters}
             cycloneSystems={cycloneData?.systems}
             selectedStationId={selectedStation?.stationId}
             onSelectStation={onSelectStation}
@@ -275,6 +299,7 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
             activeRouteInfo={activeRouteInfo}
             onClearRoute={handleClearRoute}
             userLocation={userLocation}
+            selectedDistrict={selectedDistrict}
           />
 
           {/* Quick Station Jump Strip below map */}
@@ -285,18 +310,31 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: '0.65rem',
+                flexWrap: 'wrap',
+                gap: '0.5rem',
               }}
             >
-              <div
-                style={{
-                  fontSize: '0.72rem',
-                  color: '#94a3b8',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                14 Coastal Monitoring Stations
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    color: '#94a3b8',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {isDistrictFiltered ? `${selectedDistrict} District Station (${displayedStations.length})` : `14 Coastal Monitoring Stations (${stations.length})`}
+                </span>
+                {isDistrictFiltered && onSelectDistrict && (
+                  <button
+                    onClick={() => onSelectDistrict('ALL')}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '0.68rem', padding: '0.2rem 0.5rem' }}
+                  >
+                    Show All
+                  </button>
+                )}
               </div>
               <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
                 Click to pan map & inspect telemetry
@@ -309,7 +347,7 @@ export const LiveMapView: React.FC<LiveMapViewProps> = ({
                 flexWrap: 'wrap',
               }}
             >
-              {stations.map((s) => {
+              {displayedStations.map((s) => {
                 const isSelected = s.stationId.toLowerCase() === selectedStation?.stationId.toLowerCase();
                 return (
                   <button

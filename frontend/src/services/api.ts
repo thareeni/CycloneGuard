@@ -57,7 +57,7 @@ export const api = {
       throw new Error(err.message || `Weather fetch failed (${res.status})`);
     }
     const json = await res.json();
-    return json.stations || [];
+    return Array.isArray(json.stations) ? json.stations : Array.isArray(json.data) ? json.data : [];
   },
 
   /**
@@ -105,7 +105,7 @@ export const api = {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Shelters fetch failed (${res.status})`);
     const json = await res.json();
-    return json.data || [];
+    return Array.isArray(json.data) ? json.data : Array.isArray(json.shelters) ? json.shelters : [];
   },
 
   /**

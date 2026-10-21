@@ -19,6 +19,7 @@ export class WeatherController {
         count: observations.length,
         timestamp: new Date().toISOString(),
         stations: observations,
+        data: observations,
       });
     } catch (error: any) {
       res.status(500).json({

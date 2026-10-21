@@ -4,6 +4,26 @@ import path from 'path';
 // Load .env
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+/**
+ * Normalizes Open-Meteo Base URL so that whether environment variables provide
+ * 'https://api.open-meteo.com', 'https://api.open-meteo.com/v1', or 'https://api.open-meteo.com/v1/forecast',
+ * the request always targets the valid '/v1/forecast' endpoint without trailing slashes.
+ */
+export function normalizeOpenMeteoBaseUrl(rawUrl?: string): string {
+  const fallback = 'https://api.open-meteo.com/v1/forecast';
+  if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    return fallback;
+  }
+  const trimmed = rawUrl.trim().replace(/\/+$/, '');
+  if (trimmed.endsWith('/forecast')) {
+    return trimmed;
+  }
+  if (trimmed.endsWith('/v1')) {
+    return `${trimmed}/forecast`;
+  }
+  return `${trimmed}/v1/forecast`;
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -27,8 +47,8 @@ export const config = {
 
   // Open-Meteo API
   openMeteo: {
-    baseUrl: process.env.OPEN_METEO_BASE_URL || 'https://api.open-meteo.com/v1/forecast',
-    timeoutMs: parseInt(process.env.WEATHER_FETCH_TIMEOUT_MS || '7000', 10),
+    baseUrl: normalizeOpenMeteoBaseUrl(process.env.OPEN_METEO_BASE_URL),
+    timeoutMs: parseInt(process.env.WEATHER_FETCH_TIMEOUT_MS || '10000', 10),
   },
 
   // India Meteorological Department (IMD) API
